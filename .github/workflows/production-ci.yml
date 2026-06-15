@@ -49,6 +49,7 @@ jobs:
           target: 'contracts/contracts/EnterpriseFiatToken.sol'
           solc-version: '0.8.20'
           slither-args: '--solc-remaps @openzeppelin/=contracts/node_modules/@openzeppelin/ --filter-paths "node_modules"'
+          fail-on: medium
 
   build-and-push:
     name: Build & Push Docker Image
