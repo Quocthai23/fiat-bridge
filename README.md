@@ -1,90 +1,162 @@
-# Open-Source Fiat-to-SmartContract Bridge
+# 🌉 Enterprise Fiat-to-SmartContract Bridge
 
-The **Fiat-to-SmartContract Bridge** is an enterprise-grade middleware built in Go that securely connects traditional Core Banking systems with EVM-compatible blockchains. 
+![Go Version](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat-square&logo=go)
+![Solidity](https://img.shields.io/badge/Solidity-%5E0.8.20-363636?style=flat-square&logo=solidity)
+![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=flat-square&logo=docker)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm_Ready-326CE5?style=flat-square&logo=kubernetes)
+![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)
 
-It handles the complex orchestration of minting digital tokens when fiat is locked, and burning tokens to release fiat back to the user, ensuring full atomicity, resiliency, and idempotency.
+An enterprise-grade, two-way middleware bridging traditional Core Banking systems with EVM-compatible blockchains. Built for high-concurrency, zero-data-loss, and military-grade security.
 
-## 🚀 Features
+---
 
-- **Clean Architecture:** Organized in `api`, `domain`, and `infrastructure` layers.
-- **Idempotency:** Prevents double-minting by verifying unique `core_tx_id` using a PostgreSQL database.
-- **Saga Pattern & Message Queues:** Uses RabbitMQ for asynchronous processing. Features a Dead Letter Queue (DLQ) for transaction rollbacks if the blockchain minting fails repeatedly.
-- **In-memory Nonce Manager:** Safely handles concurrent transactions without running into `Nonce too low` errors.
-- **KMS Integration:** Protects Private Keys using a `Signer` interface (currently implemented as a Mock KMS, ready to swap to AWS KMS).
-- **Gas Bumper Worker (Resiliency):** Automatically scans for pending transactions and performs Replace-by-Fee (RBF) to prevent network congestion delays.
-- **Reconciliation Engine:** A cronjob that periodically checks the Blockchain's `totalSupply` against the local Database's successfully minted amount, alerting on any discrepancies.
+## 🚀 Enterprise Architecture & Core Features
 
-## 🏗 Architecture
+This bridge is not just a simple API wrapper. It is designed to solve complex Distributed Systems and Web3 challenges:
+
+* **🔒 Military-Grade Security (AWS KMS):** Private keys are never exposed in plain-text. Implements AWS KMS Asymmetric Signing (`ECC_SECG_P256K1`) with strict EIP-2 malleability protection.
+* **⚡ High Concurrency Ready:**
+  * **Row-Level Locking:** Uses PostgreSQL `SKIP LOCKED` to safely allocate nonces across dozens of parallel worker pods without `Nonce too low` errors.
+  * **Transactional Outbox Pattern:** Guarantees atomicity between DB transactions and RabbitMQ message publishing. No dual-write bugs.
+* **🛡️ Self-Healing & Resiliency:**
+  * **Auto Gas Bumper:** Actively monitors pending txs and applies EIP-1559 Replace-by-Fee (RBF) to rescue stuck transactions during network congestion.
+  * **Eventual Consistency:** Independent Sync States (`LastMintBlock` / `LastBurnBlock`) protect against Chain Reorganizations and Pod Restarts.
+  * **Dead Letter Queue (DLQ):** Failed transactions trigger a Webhook rollback to the Core Banking system, ensuring zero financial loss.
+* **📊 Observability & Compliance:**
+  * **Reconciliation Engine:** Periodic cronjobs verifying off-chain DB records against on-chain `TotalSupply` using big integer arithmetic to prevent overflow.
+  * **Prometheus & Grafana:** Full monitoring stack included.
+
+---
+
+## 🏗️ System Architecture
 
 ```mermaid
-graph TD
-    A[Core Banking / Client] -->|POST /mint| B[API Gateway]
-    B -->|Check Idempotency| C[(PostgreSQL)]
-    B -->|Publish| D[RabbitMQ: mint_transactions]
-    D -->|Consume| E[Worker]
-    E -->|1. Get Nonce| F[Nonce Manager]
-    E -->|2. Sign Tx| G[KMS Signer]
-    E -->|3. Send Tx| H[Blockchain RPC]
+sequenceDiagram
+    participant Core as Core Banking
+    participant API as Bridge API
+    participant DB as PostgreSQL (Outbox)
+    participant RMQ as RabbitMQ
+    participant Worker as Bridge Worker
+    participant KMS as AWS KMS (HSM)
+    participant EVM as Smart Contract
+    participant Listener as On-chain Listener
+
+    %% MINT FLOW
+    Core->>API: POST /api/v1/bridge/mint
+    API->>DB: Save Tx & OutboxEvent (Atomic)
+    API-->>Core: 200 OK (Pending)
     
-    H -->|FiatBurned Event| I[Listener Worker]
-    I -->|Update DB| C
-    I -->|Release Fiat API| A
-
-    J[Gas Bumper Cron] -->|Scan Pending| C
-    J -->|Replace By Fee| H
-
-    K[Reconciliation Cron] -->|Get Total Supply| H
-    K -->|Compare| C
+    %% OUTBOX RELAY
+    DB->>RMQ: Outbox Relay pushes message
+    RMQ->>Worker: Consume Tx
+    
+    %% SIGN & BROADCAST
+    Worker->>DB: Get & Increment Nonce (SKIP LOCKED)
+    Worker->>KMS: Send Tx Hash for Signing
+    KMS-->>Worker: Return ECDSA Signature
+    Worker->>EVM: Broadcast Signed Tx
+    
+    %% CONFIRMATION
+    EVM-->>Listener: Emit FiatMinted Event
+    Listener->>DB: Update Tx Status to Completed
 ```
 
-## 🛠 Prerequisites
+---
 
-- Go 1.22+
-- Docker & Docker Compose
-- Node.js (for Hardhat/Foundry contract compilation, optional)
+## 🛠️ Tech Stack
 
-## 📦 Installation & Setup
+* **Backend:** Golang 1.22, Gin-Gonic, GORM
+* **Web3:** `go-ethereum` (Geth), OpenZeppelin, Hardhat
+* **Infrastructure:** PostgreSQL, RabbitMQ, Docker, Helm / Kubernetes
+* **Monitoring:** Prometheus, Grafana
+* **Cloud:** AWS KMS (Key Management Service)
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Quocthai23/fiat-bridge.git
-   cd fiat-bridge
-   ```
+---
 
-2. **Run Services via Docker Compose:**
-   This will spin up PostgreSQL, RabbitMQ, and the Go Bridge application.
-   ```bash
-   make docker-up
-   ```
+## 📦 Quick Start (Docker Compose)
 
-3. **(Local Development) Build and Run the Go app manually:**
-   ```bash
-   make build
-   make run
-   ```
+Spin up the entire stack locally (Postgres, RabbitMQ, Prometheus, Grafana, and the Bridge application):
 
-## 📡 API Reference
+```bash
+# 1. Clone the repository
+git clone https://github.com/Quocthai23/fiat-bridge.git
+cd fiat-bridge
 
-### Mint Tokens (Lock Fiat -> Mint Crypto)
-**Endpoint:** `POST /api/v1/bridge/mint`
+# 2. Start the infrastructure and app
+make docker-up
+```
 
-**Payload:**
+---
+
+## ☸️ Kubernetes Deployment (Helm)
+
+The project is fully ready for Kubernetes orchestration:
+
+```bash
+helm install fiat-bridge ./helm/fiat-bridge --namespace fiat-bridge --create-namespace
+```
+
+---
+
+## 📡 API Endpoints
+
+### 1. Lock Fiat & Mint Tokens
+
+* **URL:** `/api/v1/bridge/mint`
+* **Method:** `POST`
+* **Headers:** `Content-Type: application/json`
+
+**Request Body:**
 ```json
 {
-  "core_tx_id": "tx-123456789",
-  "user_address": "0xYourEthereumAddress",
-  "amount": 1000000
+  "core_tx_id": "tx-12345",
+  "user_address": "0xYourEVMAddress",
+  "amount": "1000000000000000000" // In Wei (e.g., 1 Token)
 }
 ```
 
-**Response (200 OK):**
+### 2. Burn Tokens & Unlock Fiat
+
+* **URL:** `/api/v1/bridge/burn`
+* **Method:** `POST`
+* **Headers:** `Content-Type: application/json`
+
+**Request Body:**
 ```json
 {
-  "status": "pending_on_chain",
-  "core_tx_id": "tx-123456789",
-  "message": "Mint transaction published to queue"
+  "core_tx_id": "tx-67890",
+  "user_address": "0xYourEVMAddress",
+  "amount": "1000000000000000000"
 }
 ```
 
-## 📜 License
+---
+
+## 🧪 Testing & CI/CD
+
+The project includes strict Automated Testing to ensure financial integrity:
+
+* **E2E Tests:** Full end-to-end simulation.
+* **Chaos Engineering:** `chaos_test.go` simulates Database crashes, KMS timeouts, and RabbitMQ network failures.
+* **CI/CD:** Automated via GitHub Actions including Slither Smart Contract Audits and Docker Image builds.
+
+```bash
+# Run tests locally
+go test -v ./tests/...
+```
+
+---
+
+## 📜 Smart Contract Capabilities
+
+The `EnterpriseFiatToken.sol` is an upgradeable-ready ERC20 with:
+
+* **AccessControl:** Strict isolation between `MINTER_ROLE` and `BURNER_ROLE`.
+* **Pausable:** Circuit breaker for emergency halts.
+* **Idempotency Mapping:** Prevents Replay Attacks at the EVM level.
+
+---
+
+## 🤝 License
+
 This project is licensed under the MIT License.
