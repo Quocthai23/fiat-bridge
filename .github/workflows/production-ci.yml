@@ -46,9 +46,9 @@ jobs:
       - name: Run Slither Analyzer
         uses: crytic/slither-action@v0.4.0
         with:
-          node-version: 22
-          target: 'contracts/'
-          slither-args: '--filter-paths "node_modules"'
+          target: 'contracts/contracts/EnterpriseFiatToken.sol'
+          solc-version: '0.8.20'
+          slither-args: '--solc-remaps @openzeppelin/=contracts/node_modules/@openzeppelin/ --filter-paths "node_modules"'
 
   build-and-push:
     name: Build & Push Docker Image
