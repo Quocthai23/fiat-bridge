@@ -1,0 +1,57 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Run Unit and E2E Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: secretpassword
+          POSTGRES_DB: bridge_db
+        ports:
+          - 54320:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        ports:
+          - 56720:5672
+          - 15673:15672
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Install Dependencies
+        run: go mod download
+
+      - name: Run Unit Tests
+        run: go test -v ./... -short
+
+      - name: Run E2E Tests
+        env:
+          DB_DSN: "host=localhost user=root password=secretpassword dbname=bridge_db port=54320 sslmode=disable"
+          RABBITMQ_URL: "amqp://guest:guest@localhost:56720/"
+        run: go test -v -tags=e2e ./tests/...

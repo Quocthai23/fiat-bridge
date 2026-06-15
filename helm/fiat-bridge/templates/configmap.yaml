@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fiat-bridge.fullname" . }}-config
+  labels:
+    app.kubernetes.io/name: {{ include "fiat-bridge.name" . }}
+    helm.sh/chart: {{ include "fiat-bridge.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  DB_DSN: {{ .Values.env.dbDsn | quote }}
+  RABBITMQ_URL: {{ .Values.env.rabbitmqUrl | quote }}
+  CONTRACT_ADDRESS: {{ .Values.env.contractAddress | quote }}
+  KMS_KEY_ID: {{ .Values.env.kmsKeyId | quote }}
+  AWS_REGION: {{ .Values.env.awsRegion | quote }}
+  # Note: In production, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be passed via Secrets instead of ConfigMap.
+  AWS_ACCESS_KEY_ID: {{ .Values.env.awsAccessKeyId | quote }}
+  AWS_SECRET_ACCESS_KEY: {{ .Values.env.awsSecretAccessKey | quote }}

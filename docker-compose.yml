@@ -1,0 +1,71 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: bridge_db
+    ports:
+      - "54320:5432"
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: bridge_queue
+    ports:
+      - "56720:5672"
+      - "15673:15672"
+      - "15692:15692" # Metrics port
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./monitoring/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins
+    restart: always
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: always
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=secret
+    depends_on:
+      - prometheus
+    restart: always
+
+  bridge-app:
+    build: .
+    container_name: bridge_app
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - rabbitmq
+    environment:
+      - DB_DSN=host=postgres user=root password=secretpassword dbname=bridge_db port=5432 sslmode=disable
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - CONTRACT_ADDRESS=0x0000000000000000000000000000000000000000
+      - KMS_KEY_ID=
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - AWS_REGION=
+    restart: always
+
+volumes:
+  rabbitmq_data:

@@ -1,0 +1,42 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bridge-app
+
+# Dependency directories (only if vendor/ is used locally, but good to keep)
+vendor/
+
+# Environment variables & secrets
+.env
+*.env
+*.env.local
+*.env.*.local
+config.yaml
+config.json
+
+# Test and coverage profiles
+*.out
+*.coverprofile
+coverage.txt
+
+# IDE / Editor configurations
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Docker logs
+*.log
+docker-volumes/
