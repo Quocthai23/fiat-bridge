@@ -7,7 +7,6 @@ on:
     branches: [ "main" ]
 
 jobs:
-  # JOB 1: Chạy toàn bộ các bài test hệ thống bằng Golang
   go-tests:
     name: Go Backend Testing (E2E & Chaos)
     runs-on: ubuntu-latest
@@ -24,12 +23,10 @@ jobs:
         run: go mod download
 
       - name: Run Backend Tests
-        # Chạy toàn bộ các file test trong thư mục /tests và /internal
         run: |
           go test -v ./tests/... 
           go test -v ./internal/...
 
-  # JOB 2: Kiểm toán bảo mật Smart Contract bằng Slither
   slither-audit:
     name: Smart Contract Security Audit
     runs-on: ubuntu-latest
@@ -51,15 +48,12 @@ jobs:
         with:
           node-version: 20
           target: 'contracts/'
-          # Bỏ qua cảnh báo từ các thư viện chuẩn của OpenZeppelin
-          slither-args: '--filter-paths "node_modules"' 
+          slither-args: '--filter-paths "node_modules"'
 
-  # JOB 3: Build và Push Docker Image (Chỉ chạy khi 2 Job trên PASS)
   build-and-push:
     name: Build & Push Docker Image
-    needs: [go-tests, slither-audit] # Đợi Test và Audit thành công mới chạy
+    needs: [go-tests, slither-audit]
     runs-on: ubuntu-latest
-    # Chỉ push image khi merge hoặc push trực tiếp vào nhánh main
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
@@ -78,7 +72,6 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          # Gắn 2 tag: một tag 'latest' và một tag theo mã SHA của commit để dễ rollback
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/fiat-bridge:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/fiat-bridge:${{ github.sha }}

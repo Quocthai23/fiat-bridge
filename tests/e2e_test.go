@@ -20,7 +20,7 @@ func TestLockAndMintFlow(t *testing.T) {
 	payload := map[string]interface{}{
 		"core_tx_id":   "tx-test-001",
 		"user_address": "0x1234567890abcdef1234567890abcdef12345678",
-		"amount":       1000000,
+		"amount":       "1000000",
 	}
 
 	body, _ := json.Marshal(payload)
