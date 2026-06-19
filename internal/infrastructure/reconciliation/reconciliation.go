@@ -105,4 +105,20 @@ func (e *Engine) runReconciliation() {
 	} else {
 		log.Println("[Reconciliation] Ledger matches SC perfectly.")
 	}
+
+	e.sweepExpiredPayoutOrders()
+}
+
+func (e *Engine) sweepExpiredPayoutOrders() {
+	log.Println("[Reconciliation] Sweeping expired payout orders...")
+	yesterday := time.Now().Add(-24 * time.Hour)
+	result := db.DB.Model(&domain.PayoutOrder{}).
+		Where("status = ? AND created_at < ?", "WAITING_FOR_BURN", yesterday).
+		Update("status", "EXPIRED")
+
+	if result.Error != nil {
+		log.Printf("[Reconciliation Error] Failed to sweep expired payout orders: %v\n", result.Error)
+	} else if result.RowsAffected > 0 {
+		log.Printf("[Reconciliation] Marked %d payout orders as EXPIRED\n", result.RowsAffected)
+	}
 }

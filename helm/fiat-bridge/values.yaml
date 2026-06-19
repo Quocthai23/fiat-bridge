@@ -12,6 +12,8 @@ fullnameOverride: ""
 serviceAccount:
   create: true
   annotations: {}
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/fiat-bridge-irsa
+    # iam.gke.io/gcp-service-account: fiat-bridge-gsa@my-gcp-project.iam.gserviceaccount.com
   name: ""
 
 podAnnotations: {}
@@ -19,13 +21,13 @@ podAnnotations: {}
 podSecurityContext: {}
   # fsGroup: 2000
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
 
 service:
   type: ClusterIP
@@ -33,13 +35,16 @@ service:
 
 ingress:
   enabled: false
-  className: ""
+  className: "alb" # e.g. alb (AWS), gce (GCP), nginx
   annotations: {}
+    # kubernetes.io/ingress.class: alb
+    # alb.ingress.kubernetes.io/scheme: internet-facing
+    # alb.ingress.kubernetes.io/target-type: ip
   hosts:
-    - host: chart-example.local
+    - host: fiat-bridge.local
       paths:
         - path: /
-          pathType: ImplementationSpecific
+          pathType: Prefix
   tls: []
 
 resources:
@@ -62,12 +67,16 @@ tolerations: []
 
 affinity: {}
 
-# Environment variables applied via ConfigMap and Secrets
+# Non-sensitive configuration (ConfigMap)
 env:
-  dbDsn: "host=postgres.default.svc.cluster.local user=root password=secretpassword dbname=bridge_db port=5432 sslmode=disable"
+  dbDsn: "host=postgres.default.svc.cluster.local user=root dbname=bridge_db port=5432 sslmode=disable"
   rabbitmqUrl: "amqp://guest:guest@rabbitmq.default.svc.cluster.local:5672/"
   contractAddress: "0x0000000000000000000000000000000000000000"
+  awsRegion: "us-east-1"
   kmsKeyId: ""
+
+# Sensitive configuration (Secret)
+secretEnv:
+  dbPassword: "secretpassword"
   awsAccessKeyId: ""
   awsSecretAccessKey: ""
-  awsRegion: ""

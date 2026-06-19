@@ -7,47 +7,108 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/Quocthai23/fiat-bridge/internal/api"
+	"github.com/Quocthai23/fiat-bridge/internal/domain"
+	"github.com/Quocthai23/fiat-bridge/internal/infrastructure/db"
+	"github.com/gin-gonic/gin"
 )
 
-// TestLockAndMintFlow simulates a POST request to /api/v1/bridge/mint
-func TestLockAndMintFlow(t *testing.T) {
+// TestOnRampFlow simulates a POST request to /api/v1/fiat/orders
+func TestOnRampFlow(t *testing.T) {
+	testDb := setupTestDB(t)
+	if testDb == nil {
+		return
+	}
+	db.DB = testDb
+
+	// Seed DappConfig
+	testDb.Create(&domain.DappConfig{
+		ID:          "test-api-key",
+		Name:        "Test DApp",
+		BankBin:     "970436",
+		BankAccount: "123456789",
+		AccountName: "TEST CORP",
+	})
+
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
 	api.SetupRoutes(router)
 
 	payload := map[string]interface{}{
-		"core_tx_id":   "tx-test-001",
+		"dapp_id":      "test-api-key",
 		"user_address": "0x1234567890abcdef1234567890abcdef12345678",
-		"amount":       "1000000",
+		"amount":       "100000",
+		"webhook_url":  "https://dapp.example.com/webhook",
 	}
 
 	body, _ := json.Marshal(payload)
-	req, err := http.NewRequest("POST", "/api/v1/bridge/mint", bytes.NewBuffer(body))
-	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
-	}
-
+	req, _ := http.NewRequest("POST", "/api/v1/fiat/orders", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-KEY", "test-api-key")
 	w := httptest.NewRecorder()
-
-	// This test just tests the API routing/handler structure.
-	// In a real E2E environment, you'd spin up Testcontainers (Postgres, RabbitMQ, Anvil).
-	// Because DB and Queue are not mocked in this test, this might return 500.
-	// We'll skip the actual execution or just check for 200/500 depending on environment.
 
 	router.ServeHTTP(w, req)
 
-	// In a real scenario we assert StatusOK
-	if w.Code != http.StatusOK && w.Code != http.StatusInternalServerError {
-		t.Errorf("Expected status 200 or 500, got %v", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %v: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+
+	if response["qr_url"] == nil || response["core_tx_id"] == nil {
+		t.Errorf("Response missing qr_url or core_tx_id: %v", response)
+	}
+
+	var order domain.FiatOrder
+	testDb.First(&order, "core_tx_id = ?", response["core_tx_id"])
+	if order.Status != "WAITING_FOR_PAYMENT" {
+		t.Errorf("Expected status WAITING_FOR_PAYMENT, got %s", order.Status)
 	}
 }
 
-// TestBurnAndReleaseFlow checks if we have a listener set up correctly.
-func TestBurnAndReleaseFlow(t *testing.T) {
-	// A proper E2E test would mint a token, burn it on the blockchain, and wait for
-	// the listener to pick it up and update the database status to Completed.
-	t.Log("TestBurnAndReleaseFlow - Pending Full E2E Testcontainer implementation")
+// TestOffRampFlow checks the payout order creation endpoint
+func TestOffRampFlow(t *testing.T) {
+	testDb := setupTestDB(t)
+	if testDb == nil {
+		return
+	}
+	db.DB = testDb
+
+	// Seed DappConfig
+	testDb.Create(&domain.DappConfig{
+		ID: "test-api-key",
+	})
+
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	api.SetupRoutes(router)
+
+	payload := map[string]interface{}{
+		"user_address": "0x12345",
+		"bank_account": "99999999",
+		"bank_bin":     "970407",
+		"amount":       "500000",
+	}
+
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", "/api/v1/fiat/payout-orders", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-KEY", "test-api-key")
+	
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %v", w.Code)
+	}
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+
+	var order domain.PayoutOrder
+	testDb.First(&order, "core_tx_id = ?", response["core_tx_id"])
+	if order.Status != "WAITING_FOR_BURN" {
+		t.Errorf("Expected status WAITING_FOR_BURN, got %s", order.Status)
+	}
 }

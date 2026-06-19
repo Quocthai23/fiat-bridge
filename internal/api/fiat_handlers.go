@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -194,7 +195,7 @@ func HandleCreatePayoutOrder(c *gin.Context) {
 
 	// Save sensitive bank information to Redis (Ephemeral storage) instead of Database
 	if db.RedisClient != nil {
-		ctx := context.Background()
+		ctx := c.Request.Context()
 		redisKey := "payout_bank:" + coreTxId
 		bankInfo, _ := json.Marshal(map[string]string{
 			"bank_account": req.BankAccount,

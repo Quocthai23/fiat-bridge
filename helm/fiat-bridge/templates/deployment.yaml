@@ -41,6 +41,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "fiat-bridge.fullname" . }}-config
+            - secretRef:
+                name: {{ include "fiat-bridge.fullname" . }}-secrets
           ports:
             - name: http
               containerPort: 8080

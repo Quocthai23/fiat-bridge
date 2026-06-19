@@ -13,6 +13,3 @@ data:
   CONTRACT_ADDRESS: {{ .Values.env.contractAddress | quote }}
   KMS_KEY_ID: {{ .Values.env.kmsKeyId | quote }}
   AWS_REGION: {{ .Values.env.awsRegion | quote }}
-  # Note: In production, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be passed via Secrets instead of ConfigMap.
-  AWS_ACCESS_KEY_ID: {{ .Values.env.awsAccessKeyId | quote }}
-  AWS_SECRET_ACCESS_KEY: {{ .Values.env.awsSecretAccessKey | quote }}

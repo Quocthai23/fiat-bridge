@@ -21,10 +21,14 @@ FROM alpine:latest
 WORKDIR /app
 
 # Install CA certificates for TLS requests
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata \
+    && addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Copy the binary from builder
-COPY --from=builder /app/bridge-app .
+COPY --from=builder --chown=appuser:appgroup /app/bridge-app .
+
+# Use non-root user
+USER appuser
 
 # Expose the API port
 EXPOSE 8080
