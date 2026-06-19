@@ -22,6 +22,7 @@ func SetupRoutes(r *gin.Engine) {
 			fiat := protected.Group("/fiat")
 			{
 				fiat.POST("/orders", HandleCreateFiatOrder)
+				fiat.POST("/payout-orders", HandleCreatePayoutOrder)
 			}
 		}
 

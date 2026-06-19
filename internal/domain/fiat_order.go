@@ -49,3 +49,24 @@ type DappWebhookPayload struct {
 	Status   string `json:"status"`
 	Amount   string `json:"amount"`
 }
+
+// PayoutOrder represents an off-ramp payout request
+type PayoutOrder struct {
+	ID          uint   `gorm:"primaryKey"`
+	CoreTxId    string `gorm:"uniqueIndex;not null"`
+	DappId      string `gorm:"not null"`
+	Amount      string `gorm:"not null"`
+	Wallet      string `gorm:"not null"` // user_address
+	Status      string `gorm:"not null;default:'WAITING_FOR_BURN'"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	DeletedAt   gorm.DeletedAt `gorm:"index"`
+}
+
+// CreatePayoutOrderRequest represents the API payload from DApp for off-ramp
+type CreatePayoutOrderRequest struct {
+	UserAddress string `json:"user_address" binding:"required"`
+	BankAccount string `json:"bank_account" binding:"required"`
+	BankBin     string `json:"bank_bin" binding:"required"`
+	Amount      string `json:"amount" binding:"required"`
+}

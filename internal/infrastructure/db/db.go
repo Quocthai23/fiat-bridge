@@ -52,6 +52,7 @@ func InitDB(dsn string) {
 		&domain.SyncState{},
 		&domain.FiatOrder{},
 		&domain.DappConfig{},
+		&domain.PayoutOrder{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate database schema: %v", err)

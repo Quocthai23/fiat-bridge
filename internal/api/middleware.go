@@ -49,15 +49,18 @@ func RateLimiterMiddleware() gin.HandlerFunc {
 		key := "rate_limit:" + apiKey
 
 		// Token bucket / Window approach: 50 requests per 10 seconds
-		count, err := db.RedisClient.Incr(ctx, key).Result()
+		// Using Pipeline to ensure atomicity
+		pipe := db.RedisClient.Pipeline()
+		incr := pipe.Incr(ctx, key)
+		pipe.Expire(ctx, key, 10*time.Second)
+		
+		_, err := pipe.Exec(ctx)
 		if err != nil {
 			c.Next()
 			return
 		}
 
-		if count == 1 {
-			db.RedisClient.Expire(ctx, key, 10*time.Second)
-		}
+		count := incr.Val()
 
 		if count > 50 {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Rate limit exceeded. Try again later."})

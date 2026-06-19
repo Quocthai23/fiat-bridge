@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/Quocthai23/fiat-bridge/internal/domain"
+	"github.com/Quocthai23/fiat-bridge/internal/infrastructure/db"
 )
 
 // StartPayoutWorker starts listening to the RabbitMQ payout queue for off-ramp requests
@@ -47,13 +50,32 @@ func StartPayoutWorker(ctx context.Context) {
 
 				log.Printf("Processing Payout for Tx %s, Amount: %s, Dapp: %s\n", coreTxId, amount, dappId)
 
-				// Find DApp config to get Bank Account to transfer TO (Wait, this is payout to user? No, payout to the User's bank account. Wait, the user provides their bank account somewhere? Or maybe we just mock it for now since we don't have user bank account).
-				// We'll mock the Bank API call
-				
+				var order domain.PayoutOrder
+				if err := db.DB.Where("core_tx_id = ?", coreTxId).First(&order).Error; err != nil {
+					log.Printf("Payout API Failed. PayoutOrder not found for Tx %s.\n", coreTxId)
+					d.Reject(false)
+					continue
+				}
+
+				// Retrieve sensitive Bank Info from Redis instead of DB
+				redisKey := "payout_bank:" + coreTxId
+				bankInfoStr, err := db.RedisClient.Get(context.Background(), redisKey).Result()
+				if err != nil {
+					log.Printf("Payout API Failed. Bank info missing/expired in Redis for Tx %s.\n", coreTxId)
+					db.DB.Model(&order).Update("status", "FAILED")
+					d.Reject(false)
+					continue
+				}
+
+				var bankInfo map[string]string
+				json.Unmarshal([]byte(bankInfoStr), &bankInfo)
+
 				mockBankPayload, _ := json.Marshal(map[string]string{
-					"core_tx_id": coreTxId,
-					"amount":     amount,
-					"type":       "PAYOUT",
+					"core_tx_id":   coreTxId,
+					"amount":       amount,
+					"type":         "PAYOUT",
+					"bank_account": bankInfo["bank_account"],
+					"bank_bin":     bankInfo["bank_bin"],
 				})
 
 				resp, err := http.Post("https://core-banking-internal/api/payout", "application/json", bytes.NewBuffer(mockBankPayload))
@@ -61,11 +83,13 @@ func StartPayoutWorker(ctx context.Context) {
 				if err != nil || resp.StatusCode >= 300 {
 					log.Printf("Payout API Failed for Tx %s. Sending to DLQ or alerting admin.\n", coreTxId)
 					// In real world: send alert, maybe refund.
+					db.DB.Model(&order).Update("status", "FAILED")
 					d.Reject(false) // Send to DLQ
 				} else {
 					log.Printf("Payout SUCCESS for Tx %s\n", coreTxId)
 					
-					// Update DB if we had a Payout table. For now just Ack.
+					db.DB.Model(&order).Update("status", "COMPLETED")
+					db.RedisClient.Del(context.Background(), redisKey) // Clean up Redis
 					d.Ack(false)
 				}
 			}

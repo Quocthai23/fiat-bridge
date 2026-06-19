@@ -167,3 +167,44 @@ func HandleBankWebhook(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Webhook processed successfully"})
 }
+
+// HandleCreatePayoutOrder handles DApp requests to create a payout order (Off-ramp)
+func HandleCreatePayoutOrder(c *gin.Context) {
+	var req domain.CreatePayoutOrderRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	dappId := c.GetString("dappId")
+	coreTxId := generateCoreTxId() // reuse the same generator
+
+	order := domain.PayoutOrder{
+		CoreTxId:    coreTxId,
+		DappId:      dappId,
+		Amount:      req.Amount,
+		Wallet:      req.UserAddress,
+		Status:      "WAITING_FOR_BURN",
+	}
+
+	if err := db.DB.Create(&order).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payout order"})
+		return
+	}
+
+	// Save sensitive bank information to Redis (Ephemeral storage) instead of Database
+	if db.RedisClient != nil {
+		ctx := context.Background()
+		redisKey := "payout_bank:" + coreTxId
+		bankInfo, _ := json.Marshal(map[string]string{
+			"bank_account": req.BankAccount,
+			"bank_bin":     req.BankBin,
+		})
+		db.RedisClient.Set(ctx, redisKey, bankInfo, 24*time.Hour)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"core_tx_id": order.CoreTxId,
+		"status":     order.Status,
+	})
+}
