@@ -13,5 +13,15 @@ func SetupRoutes(r *gin.Engine) {
 			bridge.POST("/mint", HandleMintCommand)
 			bridge.POST("/burn", HandleBurnCommand)
 		}
+
+		fiat := v1.Group("/fiat")
+		{
+			fiat.POST("/orders", HandleCreateFiatOrder)
+		}
+
+		webhooks := v1.Group("/webhooks")
+		{
+			webhooks.POST("/bank", HandleBankWebhook)
+		}
 	}
 }

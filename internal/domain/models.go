@@ -14,9 +14,10 @@ type BurnRequest struct {
 	Amount      string `json:"amount" binding:"required"`
 }
 
-// OutboxEvent represents an event to be published to a message broker
+// OutboxEvent represents an event to be published to a message broker or webhook
 type OutboxEvent struct {
 	ID        uint   `gorm:"primaryKey"`
+	EventType string `gorm:"not null;default:'RABBITMQ'"` // "RABBITMQ" or "WEBHOOK"
 	Payload   string `gorm:"type:text;not null"`
 	Status    string `gorm:"not null;default:'PENDING'"`
 }

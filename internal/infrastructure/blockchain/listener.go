@@ -2,6 +2,7 @@ package blockchain
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"time"
 
@@ -115,6 +116,31 @@ func (l *Listener) StartListening(ctx context.Context, defaultStartBlock uint64)
 									log.Printf("Failed to update status to completed for TxID %s: %v\n", event.CoreTxId, err)
 								} else {
 									log.Printf("Successfully marked mint transaction %s as completed\n", event.CoreTxId)
+
+									var fiatOrder domain.FiatOrder
+									if err := db.DB.Where("core_tx_id = ?", event.CoreTxId).First(&fiatOrder).Error; err == nil {
+										if fiatOrder.WebhookUrl != "" {
+											payloadMap := map[string]interface{}{
+												"core_tx_id":  event.CoreTxId,
+												"tx_hash":     event.Raw.TxHash.Hex(),
+												"status":      "SUCCESS",
+												"amount":      event.Amount.String(),
+												"webhook_url": fiatOrder.WebhookUrl,
+											}
+											payloadBytes, _ := json.Marshal(payloadMap)
+
+											outboxMsg := domain.OutboxEvent{
+												EventType: "WEBHOOK",
+												Payload:   string(payloadBytes),
+												Status:    "PENDING",
+											}
+											if err := db.DB.Create(&outboxMsg).Error; err != nil {
+												log.Printf("Failed to create webhook outbox event for TxID %s: %v\n", event.CoreTxId, err)
+											} else {
+												log.Printf("Created WEBHOOK outbox event for TxID %s\n", event.CoreTxId)
+											}
+										}
+									}
 								}
 							}
 						} else {
