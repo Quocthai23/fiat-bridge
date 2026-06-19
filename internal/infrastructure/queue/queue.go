@@ -14,6 +14,7 @@ var RabbitChannel *amqp.Channel
 
 const MintQueueName = "mint_transactions"
 const BurnQueueName = "burn_transactions"
+const PayoutQueueName = "payout_queue"
 const DLQName = "mint_transactions_dlq"
 const DLXName = "dlx_exchange"
 
@@ -96,6 +97,18 @@ func InitRabbitMQ(url string) {
 	)
 	if err != nil {
 		log.Fatalf("Failed to declare burn queue: %v", err)
+	}
+
+	_, err = RabbitChannel.QueueDeclare(
+		PayoutQueueName, // name
+		true,            // durable
+		false,           // delete when unused
+		false,           // exclusive
+		false,           // no-wait
+		args,            // arguments
+	)
+	if err != nil {
+		log.Fatalf("Failed to declare payout queue: %v", err)
 	}
 
 	fmt.Println("Connected to RabbitMQ successfully!")

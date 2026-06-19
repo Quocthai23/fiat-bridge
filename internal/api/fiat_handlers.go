@@ -31,15 +31,22 @@ func HandleCreateFiatOrder(c *gin.Context) {
 		return
 	}
 
+	dappId := c.GetString("dappId")
 	coreTxId := generateCoreTxId()
+
+	var config domain.DappConfig
+	if err := db.DB.First(&config, "id = ?", dappId).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "DApp config not found"})
+		return
+	}
 
 	order := domain.FiatOrder{
 		CoreTxId:   coreTxId,
-		DappId:     req.DappId,
+		DappId:     dappId,
 		Amount:     req.Amount,
 		Wallet:     req.UserAddress,
 		Status:     domain.FiatStatusWaiting,
-		WebhookUrl: req.WebhookUrl,
+		WebhookUrl: config.WebhookUrl,
 	}
 
 	if err := db.DB.Create(&order).Error; err != nil {
@@ -47,10 +54,15 @@ func HandleCreateFiatOrder(c *gin.Context) {
 		return
 	}
 
-	// Generate VietQR URL (Using a deep link format for simplicity, typically you'd use VietQR API)
-	// format: vietqr://bank_id/account_no?amount=xxx&description=xxx
-	// Here we use a generic placeholder URL for the MVP
-	qrUrl := fmt.Sprintf("vietqr://970436/123456789?amount=%s&description=%s", order.Amount, order.CoreTxId)
+	// Generate VietQR URL using DappConfig
+	qrUrl := fmt.Sprintf(
+		"https://img.vietqr.io/image/%s-%s-compact2.png?amount=%s&addInfo=%s&accountName=%s",
+		config.BankBin,
+		config.BankAccount,
+		order.Amount,
+		order.CoreTxId,
+		config.AccountName,
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"core_tx_id": order.CoreTxId,
@@ -78,9 +90,10 @@ func verifyBankSignature(payload domain.BankWebhookPayload) bool {
 
 // extractCoreTxId finds the CoreTxId in the transfer description
 func extractCoreTxId(description string) string {
-	re := regexp.MustCompile(`FIAT-\d+`)
+	// Improve regex to handle bank garbage characters
+	re := regexp.MustCompile(`(?i)FIAT-\d+`)
 	match := re.FindString(description)
-	return match
+	return strings.ToUpper(match)
 }
 
 // HandleBankWebhook handles incoming payment notifications from the bank

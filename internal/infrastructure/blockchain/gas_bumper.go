@@ -49,7 +49,7 @@ func (gb *GasBumper) bumpGasForStuckTransactions() {
 	fiveMinsAgo := time.Now().Add(-5 * time.Minute)
 
 	// Find transactions that have been pending for more than 5 minutes
-	if err := db.DB.Where("status = ? AND created_at < ?", domain.StatusPendingOnChain, fiveMinsAgo).Find(&stuckTxs).Error; err != nil {
+	if err := db.DB.Where("status = ? AND created_at < ?", domain.StatusPendingOnChain, fiveMinsAgo).Limit(100).Find(&stuckTxs).Error; err != nil {
 		log.Printf("[GasBumper] Error fetching stuck txs: %v\n", err)
 		return
 	}

@@ -33,6 +33,12 @@ func main() {
 	}
 	db.InitDB(dsn)
 
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+	db.InitRedis(redisAddr, "", 0)
+
 	rabbitUrl := os.Getenv("RABBITMQ_URL")
 	if rabbitUrl == "" {
 		rabbitUrl = "amqp://guest:guest@localhost:5672/"
@@ -108,6 +114,7 @@ func main() {
 	// Initialize Consumer Worker
 	queue.StartConsumerWorker(appCtx, emitter)
 	queue.StartBurnConsumerWorker(appCtx, emitter)
+	queue.StartPayoutWorker(appCtx)
 
 	// Initialize Outbox Worker
 	queue.StartOutboxRelay(appCtx)

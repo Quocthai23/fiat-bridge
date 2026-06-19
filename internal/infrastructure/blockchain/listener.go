@@ -195,6 +195,25 @@ func (l *Listener) StartListening(ctx context.Context, defaultStartBlock uint64)
 									log.Printf("Failed to update status to completed for Burn TxID %s: %v\n", event.CoreTxId, err)
 								} else {
 									log.Printf("Successfully marked burn transaction %s as completed\n", event.CoreTxId)
+									
+									// Publish PAYOUT outbox event
+									payloadMap := map[string]interface{}{
+										"core_tx_id": event.CoreTxId,
+										"amount":     event.Amount.String(),
+										"user":       event.From.Hex(),
+									}
+									payloadBytes, _ := json.Marshal(payloadMap)
+
+									outboxMsg := domain.OutboxEvent{
+										EventType: "PAYOUT",
+										Payload:   string(payloadBytes),
+										Status:    "PENDING",
+									}
+									if err := db.DB.Create(&outboxMsg).Error; err != nil {
+										log.Printf("Failed to create PAYOUT outbox event for TxID %s: %v\n", event.CoreTxId, err)
+									} else {
+										log.Printf("Created PAYOUT outbox event for TxID %s\n", event.CoreTxId)
+									}
 								}
 							}
 						} else {

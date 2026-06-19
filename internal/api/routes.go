@@ -11,6 +11,7 @@ func SetupRoutes(r *gin.Engine) {
 		// Protected Routes
 		protected := v1.Group("/")
 		protected.Use(RequireApiKey())
+		protected.Use(RateLimiterMiddleware())
 		{
 			bridge := protected.Group("/bridge")
 			{

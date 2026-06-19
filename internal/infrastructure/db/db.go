@@ -44,7 +44,15 @@ func InitDB(dsn string) {
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	// Auto-migrate the schema
-	err = DB.AutoMigrate(&domain.Transaction{}, &domain.AddressNonce{}, &domain.FailedNonce{}, &domain.OutboxEvent{}, &domain.SyncState{})
+	err = DB.AutoMigrate(
+		&domain.Transaction{},
+		&domain.AddressNonce{},
+		&domain.FailedNonce{},
+		&domain.OutboxEvent{},
+		&domain.SyncState{},
+		&domain.FiatOrder{},
+		&domain.DappConfig{},
+	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate database schema: %v", err)
 	}

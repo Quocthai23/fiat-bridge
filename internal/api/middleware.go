@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"net/http"
-	"os"
+	"time"
 
+	"github.com/Quocthai23/fiat-bridge/internal/domain"
+	"github.com/Quocthai23/fiat-bridge/internal/infrastructure/db"
 	"github.com/gin-gonic/gin"
 )
 
@@ -11,25 +14,56 @@ import (
 func RequireApiKey() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("X-API-KEY")
-		
-		// For this MVP, we validate against a master DAPP_API_KEY environment variable.
-		// In a full production scenario, we would query the database to find the DApp
-		// associated with this API key.
-		expectedKey := os.Getenv("DAPP_API_KEY")
-		if expectedKey == "" {
-			// If no key is configured on the server, deny access by default for safety
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Server API key not configured"})
+		if apiKey == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing X-API-KEY"})
 			return
 		}
 
-		if apiKey == "" || apiKey != expectedKey {
+		var config domain.DappConfig
+		if err := db.DB.First(&config, "id = ?", apiKey).Error; err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized DApp"})
 			return
 		}
 
-		// Store a mock DApp ID in the context. In a real scenario, this would be the actual ID from DB.
-		c.Set("dappId", "dapp-authenticated")
-		
+		c.Set("dappId", config.ID)
+		c.Next()
+	}
+}
+
+// RateLimiterMiddleware uses Redis to limit requests per API key
+func RateLimiterMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		apiKey := c.GetHeader("X-API-KEY")
+		if apiKey == "" {
+			c.Next()
+			return
+		}
+
+		// Skip if redis is not configured
+		if db.RedisClient == nil {
+			c.Next()
+			return
+		}
+
+		ctx := context.Background()
+		key := "rate_limit:" + apiKey
+
+		// Token bucket / Window approach: 50 requests per 10 seconds
+		count, err := db.RedisClient.Incr(ctx, key).Result()
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		if count == 1 {
+			db.RedisClient.Expire(ctx, key, 10*time.Second)
+		}
+
+		if count > 50 {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Rate limit exceeded. Try again later."})
+			return
+		}
+
 		c.Next()
 	}
 }
