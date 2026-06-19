@@ -1,64 +1,115 @@
-# Fiat Bridge Enterprise
+# Fiat Bridge Enterprise 🌉
 
-Fiat Bridge is a robust, production-ready Multi-tenant White-label middleware for bridging traditional Web2 Fiat transactions (VND) with Web3 On-chain smart contracts.
+![Docker Pulls](https://img.shields.io/docker/pulls/quocthai23/fiat-bridge?style=flat-square)
+![Go Version](https://img.shields.io/badge/Go-1.20+-00ADD8?style=flat-square&logo=go)
+![Architecture](https://img.shields.io/badge/Architecture-Event%20Driven-success?style=flat-square)
 
-This project enables DApps to seamlessly integrate fiat on-ramp (deposits) and off-ramp (withdrawals) features without directly interacting with banking infrastructure.
+Fiat Bridge is a robust, production-ready Multi-tenant White-label middleware that bridges traditional Web2 Fiat transactions (VND) with Web3 On-chain smart contracts. 
 
-## Core Features
-* **Multi-tenant White-label**: Each DApp registers its own bank details, allowing Fiat money to flow directly into their bank accounts.
-* **Dynamic VietQR On-ramp**: Automatically generates `vietqr.io` payment links customized for each DApp with specific `core_tx_id` identifiers for automatic reconciliation.
-* **Web2 to Web3 Off-ramp Mapping**: Securely handles Off-ramp withdrawals via `PayoutOrder` without exposing sensitive user bank details to the public blockchain.
-* **Callback Security (Webhook Dispatcher)**: Reliable Outbox-pattern webhook delivery with HMAC-SHA256 signatures and Exponential Backoff retry mechanics (5s -> 1m -> 5m -> 1h).
-* **API Rate Limiting**: Built-in Redis Token Bucket / Sliding Window rate limiter mapped to API keys.
-* **Blockchain Resiliency**:
-  - `GasBumper`: Cron job that scans the mempool for stuck transactions and auto-replaces them using Replace-By-Fee (RBF).
-  - `Listener`: 12-block confirmation listener for `FiatMinted` and `FiatBurned` events.
-  - `Reconciliation Engine`: Hourly cron job checking for mismatches between Database and Blockchain state.
+It acts as a **Banking-as-a-Service (BaaS)**, allowing DApps to seamlessly integrate fiat On-ramp and Off-ramp features without directly interacting with banking infrastructure.
 
 ---
 
-## High-Level Architecture
+## 🚀 Quick Start (Production via Docker Hub)
 
-### On-ramp (Fiat Deposit -> Token Mint)
-1. **DApp Request**: User wants to deposit 100k VND. DApp calls `POST /api/v1/fiat/orders` with DApp API Key.
-2. **VietQR Gen**: Bridge checks `DappConfig` for that API Key, gets the DApp's Vietcombank/Techcombank details, and generates a dynamic VietQR image link. Returns `core_tx_id` and `qr_url`.
-3. **User Pays**: User scans QR and transfers VND.
-4. **Bank Webhook**: Bank API (e.g. SePay/Casso) pushes webhook to `POST /api/v1/webhooks/bank`.
-5. **Reconciliation**: Bridge extracts `core_tx_id` from transfer description, marks order as `PAID`.
-6. **Mint Queue**: Bridge pushes `MINT` event to RabbitMQ.
-7. **Worker & Blockchain**: Worker consumes from RabbitMQ, calls `Mint()` on Smart Contract using KMS / Private Key signing.
-8. **DApp Callback**: Once mined, `Outbox Relay` sends HMAC-SHA256 signed webhook back to DApp.
+The easiest way to run Fiat Bridge is using our pre-built Docker image. You **do not** need to clone this repository or install Go.
 
-### Off-ramp (Token Burn -> Fiat Payout)
-1. **DApp Request (Web2)**: User enters their bank account info on DApp. DApp calls `POST /api/v1/fiat/payout-orders` with `user_address`, `bank_account`, `bank_bin`.
-2. **Secure Mapping**: Bridge saves a `PayoutOrder` to DB (Status: `WAITING_FOR_BURN`) and returns `core_tx_id`. **PII Compliance:** The user's sensitive `bank_account` and `bank_bin` are NEVER stored in the database. Instead, they are temporarily cached in Redis with a 24-hour TTL, ensuring full data privacy.
-3. **On-chain Burn**: User signs Web3 transaction calling `burn(core_tx_id, amount)` on Smart Contract.
-4. **Listener**: Bridge Listener detects `FiatBurned` event after 12 block confirmations.
-5. **Payout Dispatch**: Listener inserts `PAYOUT` event into Outbox -> RabbitMQ `payout_queue`.
-6. **Payout Worker**: Reads `core_tx_id`, fetches the user's bank details from the ephemeral Redis cache, triggers internal `core-banking` API to transfer VND, and then immediately purges the cache.
+**1. Create a `docker-compose.yml` file:**
+```yaml
+version: '3.8'
+services:
+  app:
+    image: quocthai23/fiat-bridge:v1.0  # Or :latest
+    container_name: fiat-bridge-app
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    restart: always
 
----
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: bridge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
 
-## Setup & Running
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
 
-### Requirements
-* Docker & docker-compose
-* Go 1.20+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: always
 
-### Run with Docker
-Start PostgreSQL, RabbitMQ, Redis, Prometheus, Grafana, and the Bridge App:
-```bash
-make docker-up
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
 ```
 
-### Run Locally (Development)
+**2. Create a `.env` file in the same directory:**
+```env
+DATABASE_URL=postgres://root:secretpassword@postgres:5432/bridge?sslmode=disable
+REDIS_ADDR=redis:6379
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+CONTRACT_ADDRESS=0xYourSmartContractAddress
+PRIVATE_KEY_HEX=YourAdminPrivateKey
+```
+
+**3. Start the system:**
 ```bash
-# Requires .env variables (DATABASE_URL, REDIS_ADDR, RABBITMQ_URL)
-make build
+docker-compose up -d
+```
+Your gateway is now running at `http://localhost:8080`.
+
+## 🛠 Local Development (From Source)
+If you want to contribute to the codebase or build it locally:
+
+**Requirements:**
+- Go 1.20+
+- Docker & docker-compose
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Quocthai23/fiat-bridge.git
+cd fiat-bridge
+
+# 2. Start the infrastructure (DB, Redis, RabbitMQ)
+docker-compose -f docker-compose.infra.yml up -d
+
+# 3. Run the Go application
 make run
 ```
 
-## Dashboard & Monitoring
-* **RabbitMQ**: `http://localhost:15673` (guest/guest)
-* **Grafana**: `http://localhost:3000` (admin/secret)
-* **Prometheus**: `http://localhost:9090`
+## ✨ Core Features
+- **Zero-Knowledge PII Storage:** User's sensitive bank account details are never stored permanently; utilizing short-lived Redis TTL cache for utmost privacy.
+- **Race-Condition Proof:** Leverages PostgreSQL `FOR UPDATE` row-level locking to prevent double-minting during network spikes.
+- **Dynamic VietQR On-ramp:** Auto-generates QR links embedded with `core_tx_id` for automated banking reconciliation.
+- **Smart Gas Bumper:** Uses EIP-1559 Replace-By-Fee (RBF) to automatically untangle stuck transactions in the EVM mempool.
+- **Webhook Outbox Pattern:** Ensures guaranteed delivery of Webhooks to DApps with HMAC-SHA256 signatures and exponential backoff retry.
+- **API Rate Limiting:** Built-in Redis pipeline-based Token Bucket limiter per API Key to prevent DDoS.
+
+## 📊 Dashboard & Monitoring
+When running via Docker, monitoring tools are accessible at:
+- **RabbitMQ Dashboard:** `http://localhost:15672` (guest/guest)
+- **(Optional) Grafana:** `http://localhost:3000` (admin/secret)
+- **(Optional) Prometheus:** `http://localhost:9090`
