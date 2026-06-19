@@ -72,30 +72,26 @@ func (e *Engine) runReconciliation() {
 		return
 	}
 
-	var mintedAmounts []string
-	db.DB.Model(&domain.Transaction{}).
-		Where("type = ? AND status = ? AND block_number <= ?", domain.TxTypeMint, domain.StatusCompleted, blockNum).
-		Pluck("amount", &mintedAmounts)
+	var totalMintedStr, totalBurnedStr string
 
-	totalMinted := big.NewInt(0)
-	for _, amtStr := range mintedAmounts {
-		amt, ok := new(big.Int).SetString(amtStr, 10)
-		if ok {
-			totalMinted.Add(totalMinted, amt)
-		}
+	db.DB.Model(&domain.Transaction{}).
+		Select("COALESCE(SUM(CAST(amount AS NUMERIC)), 0)").
+		Where("type = ? AND status = ? AND block_number <= ?", domain.TxTypeMint, domain.StatusCompleted, blockNum).
+		Scan(&totalMintedStr)
+
+	totalMinted, ok := new(big.Int).SetString(totalMintedStr, 10)
+	if !ok {
+		totalMinted = big.NewInt(0)
 	}
 
-	var burnedAmounts []string
 	db.DB.Model(&domain.Transaction{}).
+		Select("COALESCE(SUM(CAST(amount AS NUMERIC)), 0)").
 		Where("type = ? AND status = ? AND block_number <= ?", domain.TxTypeBurn, domain.StatusCompleted, blockNum).
-		Pluck("amount", &burnedAmounts)
+		Scan(&totalBurnedStr)
 
-	totalBurned := big.NewInt(0)
-	for _, amtStr := range burnedAmounts {
-		amt, ok := new(big.Int).SetString(amtStr, 10)
-		if ok {
-			totalBurned.Add(totalBurned, amt)
-		}
+	totalBurned, ok := new(big.Int).SetString(totalBurnedStr, 10)
+	if !ok {
+		totalBurned = big.NewInt(0)
 	}
 
 	// dbTotal = totalMinted - totalBurned

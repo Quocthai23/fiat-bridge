@@ -27,10 +27,16 @@ var client *ethclient.Client
 
 func main() {
 	// 0. Initialize Database & Queue
-	dsn := "host=localhost user=root password=secretpassword dbname=bridge_db port=54320 sslmode=disable"
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		log.Fatal("DATABASE_URL is required")
+	}
 	db.InitDB(dsn)
 
-	rabbitUrl := "amqp://guest:guest@localhost:56720/"
+	rabbitUrl := os.Getenv("RABBITMQ_URL")
+	if rabbitUrl == "" {
+		rabbitUrl = "amqp://guest:guest@localhost:5672/"
+	}
 	queue.InitRabbitMQ(rabbitUrl)
 
 	var err error

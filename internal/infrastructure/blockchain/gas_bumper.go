@@ -142,6 +142,7 @@ func (gb *GasBumper) bumpGasForStuckTransactions() {
 		auth.GasLimit = uint64(300000) // in units
 		auth.GasFeeCap = bumpedFeeCap
 		auth.GasTipCap = bumpedTipCap
+		auth.NoSend = true // Only sign, do not broadcast synchronously
 
 		var newTx *coreTypes.Transaction
 		var errMintBurn error
@@ -153,7 +154,12 @@ func (gb *GasBumper) bumpGasForStuckTransactions() {
 		}
 
 		if errMintBurn != nil {
-			log.Printf("[GasBumper] Failed to bump tx %s: %v\n", tx.CoreTxId, errMintBurn)
+			log.Printf("[GasBumper] Failed to sign bumped tx %s: %v\n", tx.CoreTxId, errMintBurn)
+			continue
+		}
+
+		if err := gb.emitter.BroadcastTransaction(ctx, newTx); err != nil {
+			log.Printf("[GasBumper] Failed to broadcast bumped tx %s: %v\n", tx.CoreTxId, err)
 			continue
 		}
 

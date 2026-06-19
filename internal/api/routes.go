@@ -8,17 +8,23 @@ import (
 func SetupRoutes(r *gin.Engine) {
 	v1 := r.Group("/api/v1")
 	{
-		bridge := v1.Group("/bridge")
+		// Protected Routes
+		protected := v1.Group("/")
+		protected.Use(RequireApiKey())
 		{
-			bridge.POST("/mint", HandleMintCommand)
-			bridge.POST("/burn", HandleBurnCommand)
+			bridge := protected.Group("/bridge")
+			{
+				bridge.POST("/mint", HandleMintCommand)
+				bridge.POST("/burn", HandleBurnCommand)
+			}
+
+			fiat := protected.Group("/fiat")
+			{
+				fiat.POST("/orders", HandleCreateFiatOrder)
+			}
 		}
 
-		fiat := v1.Group("/fiat")
-		{
-			fiat.POST("/orders", HandleCreateFiatOrder)
-		}
-
+		// Unprotected Webhook Routes
 		webhooks := v1.Group("/webhooks")
 		{
 			webhooks.POST("/bank", HandleBankWebhook)
